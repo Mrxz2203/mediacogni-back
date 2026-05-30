@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -40,7 +40,7 @@ class GazeDato(Base):
 
     id          = Column(Integer, primary_key=True, index=True)
     sesion_id   = Column(Integer, ForeignKey("sesiones.id"), nullable=False)
-    timestamp   = Column(Integer)
+    timestamp = Column(BigInteger)
     yaw         = Column(Float)
     pitch       = Column(Float)
     roll        = Column(Float)

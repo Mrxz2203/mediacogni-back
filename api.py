@@ -3,23 +3,24 @@ api.py — FastAPI para V-COGNI
 Ejecutar con: uvicorn api:app --reload --port 8000
 """
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from pydantic import BaseModel
 
 import models, schemas
 from database import engine, get_db
+from classifier import clasificar
 
-# ── Crear tablas automáticamente ──────────────────
+# ── Crear tablas ───────────────────────────────────
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="V-COGNI API", version="1.0")
 
-# ── CORS — permite conexión desde React ───────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -28,29 +29,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── JWT config ────────────────────────────────────
-SECRET_KEY  = "vcogni_secret_key_2026"
-ALGORITHM   = "HS256"
+# ── JWT ────────────────────────────────────────────
+SECRET_KEY         = "vcogni_secret_key_2026"
+ALGORITHM          = "HS256"
 TOKEN_EXPIRE_HOURS = 8
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+def hash_password(p):   return pwd_context.hash(p)
+def verify_password(p, h): return pwd_context.verify(p, h)
 
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
-
-def create_token(data: dict) -> str:
+def create_token(data):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
-    to_encode.update({"exp": expire})
+    to_encode["exp"] = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def get_current_user(token: str, db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        codigo: str = payload.get("sub")
+        codigo  = payload.get("sub")
         if not codigo:
             raise HTTPException(status_code=401, detail="Token inválido")
     except JWTError:
@@ -61,7 +58,22 @@ def get_current_user(token: str, db: Session = Depends(get_db)):
     return user
 
 
-# ── ENDPOINTS ─────────────────────────────────────
+# ── Schema para clasificar ─────────────────────────
+class MetricaGaze(BaseModel):
+    yaw:         float
+    pitch:       float
+    roll:        float
+    gaze_x:      float
+    gaze_y:      float
+    blink_ratio: float
+    pupil_px:    float
+
+class ClasificarRequest(BaseModel):
+    metricas: List[MetricaGaze]
+    duracion: Optional[int] = 90
+
+
+# ── ENDPOINTS ──────────────────────────────────────
 
 @app.get("/")
 def root():
@@ -103,20 +115,54 @@ def get_me(token: str, db: Session = Depends(get_db)):
     return get_current_user(token, db)
 
 
-# Guardar sesión
-@app.post("/sesiones", response_model=schemas.SesionOut, status_code=201)
-def create_sesion(data: schemas.SesionCreate, token: str, db: Session = Depends(get_db)):
+# ── CLASIFICAR + GUARDAR SESIÓN ────────────────────
+@app.post("/clasificar")
+def clasificar_sesion(
+    data: ClasificarRequest,
+    token: str,
+    db: Session = Depends(get_db)
+):
     user = get_current_user(token, db)
+
+    # Convertir métricas a lista de dicts
+    metricas_dict = [m.dict() for m in data.metricas]
+
+    # Clasificar con XGBoost
+    resultado = clasificar(metricas_dict)
+
+    # Guardar sesión en BD
     sesion = models.Sesion(
         usuario_id       = user.id,
         duracion         = data.duracion,
-        estilo_cognitivo = data.estilo_cognitivo,
-        confianza        = data.confianza,
+        estilo_cognitivo = resultado["estilo"],
+        confianza        = resultado["confianza"],
     )
     db.add(sesion)
     db.commit()
     db.refresh(sesion)
-    return sesion
+
+    # Guardar métricas individuales
+    for m in metricas_dict:
+        gaze = models.GazeDato(
+            sesion_id   = sesion.id,
+            timestamp   = int(datetime.utcnow().timestamp() * 1000),
+            yaw         = m.get("yaw"),
+            pitch       = m.get("pitch"),
+            roll        = m.get("roll"),
+            blink_ratio = m.get("blink_ratio"),
+            gaze_x      = m.get("gaze_x"),
+            gaze_y      = m.get("gaze_y"),
+            pupil_px    = m.get("pupil_px"),
+        )
+        db.add(gaze)
+    db.commit()
+
+    return {
+        "estilo_cognitivo": resultado["estilo"],
+        "confianza":        resultado["confianza"],
+        "sesion_id":        sesion.id,
+        "mensaje":          f"Clasificado como {resultado['estilo']} con {round(resultado['confianza']*100)}% de confianza"
+    }
 
 
 # Historial del usuario
