@@ -173,6 +173,21 @@ def get_mis_sesiones(token: str, db: Session = Depends(get_db)):
         models.Sesion.usuario_id == user.id
     ).order_by(models.Sesion.fecha.desc()).all()
 
+# Actualizar perfil
+@app.put("/usuarios/me/update")
+def update_me(
+    data: dict,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    if "nombre"   in data: user.nombre  = data["nombre"]
+    if "carrera"  in data: user.carrera = data["carrera"]
+    if "password" in data and data["password"]:
+        user.password = hash_password(data["password"])
+    db.commit()
+    db.refresh(user)
+    return {"mensaje": "Perfil actualizado"}
 
 if __name__ == "__main__":
     import uvicorn
