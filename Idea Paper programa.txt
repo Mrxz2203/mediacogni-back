@@ -1,0 +1,26 @@
+El webgazer no lanza coordenadas.
+Revisar el paper de WU.
+La idea principal:
+Poner el contenido frente al estudiante.
+Usuario: 90 segundos.
+60 seg: Pantalla en blanco y negro (no hay nada).
+90 segundos como refuerzo.
+4 Minutos.+Validar cuestionario.
+Coordenadas muestra del enfoque del estilo cognitivo del usuario.
+plus-> lo de fatiga.
+Modelo de mediapipe.
+El retoque de validacion (no hay dataset)
+No hay dataset de personas.
+Revisa la informacion del paper y su validacion. (muestra)
+Texto intuitivo para el usuario -> que valida el contenido.
+(only rol estudiante) - maybe docente.
+Apoyo del modelo ML xgboost.
+CNN ya esta integrado.
+Ayudame a crear un dataset con las coordenadas de este modelo.
+3 Pantllas:
+La pantlla de ingreso.
+El texto, el tiempo al usuario, su camara, registra las coordenadas.
+1 minuto y medio.
+Detalles al sidebar.
+Dashboard de resultados.
+
