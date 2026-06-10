@@ -19,6 +19,7 @@ class TokenSchema(BaseModel):
     token_type   : str = "bearer"
     rol          : str
     nombre       : str
+    id           : int  
 
 # ── Sesiones ──────────────────────────────────────
 class SesionCreate(BaseModel):
@@ -43,6 +44,14 @@ class UsuarioOut(BaseModel):
     codigo  : str
     rol     : str
     carrera : Optional[str]
-
     class Config:
         from_attributes = True
+
+# ── Admin ───────────────────────────────────────
+class UsuarioUpdate(BaseModel):
+    nombre  : Optional[str] = None
+    codigo  : Optional[str] = None
+    rol     : Optional[str] = None
+    carrera : Optional[str] = None
+    
+    

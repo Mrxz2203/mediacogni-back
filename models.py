@@ -7,6 +7,7 @@ import enum
 class RolEnum(str, enum.Enum):
     estudiante = "estudiante"
     docente = "docente"
+    admin      = "admin"
 
 class Usuario(Base):
     __tablename__ = "usuarios"

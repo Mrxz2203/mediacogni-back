@@ -106,7 +106,7 @@ def login(data: schemas.LoginSchema, db: Session = Depends(get_db)):
     if not user or not verify_password(data.password, user.password):
         raise HTTPException(status_code=401, detail="Código o contraseña incorrectos")
     token = create_token({"sub": user.codigo, "rol": user.rol})
-    return {"access_token": token, "token_type": "bearer", "rol": user.rol, "nombre": user.nombre}
+    return {"access_token": token, "token_type": "bearer", "rol": user.rol, "nombre": user.nombre,  "id": user.id, }
 
 
 # Perfil
@@ -188,6 +188,40 @@ def update_me(
     db.commit()
     db.refresh(user)
     return {"mensaje": "Perfil actualizado"}
+
+# ── ADMIN ──────────────────────────────────────────
+
+def require_admin(token: str, db: Session = Depends(get_db)):
+    user = get_current_user(token, db)
+    if user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores")
+    return user
+
+@app.get("/admin/usuarios", response_model=List[schemas.UsuarioOut])
+def admin_get_usuarios(token: str, db: Session = Depends(get_db)):
+    require_admin(token, db)
+    return db.query(models.Usuario).all()
+
+@app.delete("/admin/usuarios/{user_id}", status_code=204)
+def admin_delete_usuario(user_id: int, token: str, db: Session = Depends(get_db)):
+    require_admin(token, db)
+    user = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    db.delete(user)
+    db.commit()
+
+@app.put("/admin/usuarios/{user_id}", response_model=schemas.UsuarioOut)
+def admin_update_usuario(user_id: int, data: schemas.UsuarioUpdate, token: str, db: Session = Depends(get_db)):
+    require_admin(token, db)
+    user = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    for field, value in data.dict(exclude_unset=True).items():
+        setattr(user, field, value)
+    db.commit()
+    db.refresh(user)
+    return user
 
 if __name__ == "__main__":
     import uvicorn
