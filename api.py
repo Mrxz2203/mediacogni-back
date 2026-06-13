@@ -12,6 +12,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
+import json
+
 import models, schemas
 from database import engine, get_db
 from classifier import clasificar
@@ -36,7 +38,7 @@ TOKEN_EXPIRE_HOURS = 8
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def hash_password(p):   return pwd_context.hash(p)
+def hash_password(p):      return pwd_context.hash(p)
 def verify_password(p, h): return pwd_context.verify(p, h)
 
 def create_token(data):
@@ -106,7 +108,7 @@ def login(data: schemas.LoginSchema, db: Session = Depends(get_db)):
     if not user or not verify_password(data.password, user.password):
         raise HTTPException(status_code=401, detail="Código o contraseña incorrectos")
     token = create_token({"sub": user.codigo, "rol": user.rol})
-    return {"access_token": token, "token_type": "bearer", "rol": user.rol, "nombre": user.nombre,  "id": user.id, }
+    return {"access_token": token, "token_type": "bearer", "rol": user.rol, "nombre": user.nombre, "id": user.id}
 
 
 # Perfil
@@ -124,13 +126,9 @@ def clasificar_sesion(
 ):
     user = get_current_user(token, db)
 
-    # Convertir métricas a lista de dicts
     metricas_dict = [m.dict() for m in data.metricas]
+    resultado     = clasificar(metricas_dict)
 
-    # Clasificar con XGBoost
-    resultado = clasificar(metricas_dict)
-
-    # Guardar sesión en BD
     sesion = models.Sesion(
         usuario_id       = user.id,
         duracion         = data.duracion,
@@ -141,7 +139,6 @@ def clasificar_sesion(
     db.commit()
     db.refresh(sesion)
 
-    # Guardar métricas individuales
     for m in metricas_dict:
         gaze = models.GazeDato(
             sesion_id   = sesion.id,
@@ -173,13 +170,10 @@ def get_mis_sesiones(token: str, db: Session = Depends(get_db)):
         models.Sesion.usuario_id == user.id
     ).order_by(models.Sesion.fecha.desc()).all()
 
+
 # Actualizar perfil
 @app.put("/usuarios/me/update")
-def update_me(
-    data: dict,
-    token: str,
-    db: Session = Depends(get_db)
-):
+def update_me(data: dict, token: str, db: Session = Depends(get_db)):
     user = get_current_user(token, db)
     if "nombre"   in data: user.nombre  = data["nombre"]
     if "carrera"  in data: user.carrera = data["carrera"]
@@ -188,6 +182,7 @@ def update_me(
     db.commit()
     db.refresh(user)
     return {"mensaje": "Perfil actualizado"}
+
 
 # ── ADMIN ──────────────────────────────────────────
 
@@ -222,6 +217,78 @@ def admin_update_usuario(user_id: int, data: schemas.UsuarioUpdate, token: str, 
     db.commit()
     db.refresh(user)
     return user
+
+
+# ── CUESTIONARIO FELDER-SILVERMAN ──────────────────
+
+def calcular_resultado_cuestionario(respuestas: dict) -> dict:
+    """
+    Calcula el puntaje Visual/Verbal.
+    a = Visual (+1), b = Verbal (-1)
+    Puntaje: -11 a +11
+    """
+    puntaje = 0
+    for v in respuestas.values():
+        if v == 'a':
+            puntaje += 1
+        elif v == 'b':
+            puntaje -= 1
+
+    if puntaje >= 4:
+        resultado = "Visual"
+    elif puntaje <= -4:
+        resultado = "Verbal"
+    else:
+        resultado = "Balanceado"
+
+    return {"puntaje": puntaje, "resultado": resultado}
+
+
+@app.post("/cuestionario", response_model=schemas.CuestionarioOut, status_code=201)
+def crear_cuestionario(
+    data: schemas.CuestionarioCreate,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    calc = calcular_resultado_cuestionario(data.respuestas)
+
+    # Si ya existe, actualizar en lugar de crear
+    existente = db.query(models.Cuestionario).filter(
+        models.Cuestionario.usuario_id == user.id
+    ).first()
+
+    if existente:
+        existente.respuestas = json.dumps(data.respuestas)
+        existente.puntaje    = calc["puntaje"]
+        existente.resultado  = calc["resultado"]
+        existente.fecha      = datetime.utcnow()
+        db.commit()
+        db.refresh(existente)
+        return existente
+
+    cuestionario = models.Cuestionario(
+        usuario_id = user.id,
+        respuestas = json.dumps(data.respuestas),
+        puntaje    = calc["puntaje"],
+        resultado  = calc["resultado"],
+    )
+    db.add(cuestionario)
+    db.commit()
+    db.refresh(cuestionario)
+    return cuestionario
+
+
+@app.get("/cuestionario/me", response_model=schemas.CuestionarioOut)
+def get_mi_cuestionario(token: str, db: Session = Depends(get_db)):
+    user = get_current_user(token, db)
+    cuestionario = db.query(models.Cuestionario).filter(
+        models.Cuestionario.usuario_id == user.id
+    ).first()
+    if not cuestionario:
+        raise HTTPException(status_code=404, detail="Cuestionario no completado aún.")
+    return cuestionario
+
 
 if __name__ == "__main__":
     import uvicorn

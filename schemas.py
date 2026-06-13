@@ -55,3 +55,16 @@ class UsuarioUpdate(BaseModel):
     carrera : Optional[str] = None
     
     
+
+class CuestionarioCreate(BaseModel):
+    respuestas: dict  # {"1": "a", "2": "b", ...}
+
+class CuestionarioOut(BaseModel):
+    id:        int
+    puntaje:   int
+    resultado: str
+    fecha:     datetime
+    respuestas: str
+
+    class Config:
+        from_attributes = True
