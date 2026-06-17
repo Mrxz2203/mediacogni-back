@@ -218,6 +218,28 @@ def admin_update_usuario(user_id: int, data: schemas.UsuarioUpdate, token: str, 
     db.refresh(user)
     return user
 
+@app.get("/admin/sesiones/total")
+def admin_get_total_sesiones(token: str, db: Session = Depends(get_db)):
+    require_admin(token, db)
+    return {"total": db.query(models.Sesion).count()}
+
+@app.get("/admin/usuarios/{user_id}/sesiones")
+def admin_get_sesiones_usuario(user_id: int, token: str, db: Session = Depends(get_db)):
+    require_admin(token, db)
+    sesiones = db.query(models.Sesion).filter(
+        models.Sesion.usuario_id == user_id
+    ).order_by(models.Sesion.fecha.desc()).all()
+    return sesiones
+
+@app.get("/admin/usuarios/{user_id}/cuestionario")
+def admin_get_cuestionario_usuario(user_id: int, token: str, db: Session = Depends(get_db)):
+    require_admin(token, db)
+    cuestionario = db.query(models.Cuestionario).filter(
+        models.Cuestionario.usuario_id == user_id
+    ).first()
+    if not cuestionario:
+        raise HTTPException(status_code=404, detail="Sin cuestionario")
+    return cuestionario
 
 # ── CUESTIONARIO FELDER-SILVERMAN ──────────────────
 
