@@ -236,10 +236,17 @@ def admin_get_cuestionario_usuario(user_id: int, token: str, db: Session = Depen
     require_admin(token, db)
     cuestionario = db.query(models.Cuestionario).filter(
         models.Cuestionario.usuario_id == user_id
-    ).first()
+    ).order_by(models.Cuestionario.fecha.desc()).first()
     if not cuestionario:
         raise HTTPException(status_code=404, detail="Sin cuestionario")
     return cuestionario
+
+@app.get("/admin/usuarios/{user_id}/cuestionarios", response_model=List[schemas.CuestionarioOut])
+def admin_get_cuestionarios_usuario(user_id: int, token: str, db: Session = Depends(get_db)):
+    require_admin(token, db)
+    return db.query(models.Cuestionario).filter(
+        models.Cuestionario.usuario_id == user_id
+    ).order_by(models.Cuestionario.fecha.desc()).all()
 
 # ── CUESTIONARIO FELDER-SILVERMAN ──────────────────
 
@@ -275,20 +282,6 @@ def crear_cuestionario(
     user = get_current_user(token, db)
     calc = calcular_resultado_cuestionario(data.respuestas)
 
-    # Si ya existe, actualizar en lugar de crear
-    existente = db.query(models.Cuestionario).filter(
-        models.Cuestionario.usuario_id == user.id
-    ).first()
-
-    if existente:
-        existente.respuestas = json.dumps(data.respuestas)
-        existente.puntaje    = calc["puntaje"]
-        existente.resultado  = calc["resultado"]
-        existente.fecha      = datetime.utcnow()
-        db.commit()
-        db.refresh(existente)
-        return existente
-
     cuestionario = models.Cuestionario(
         usuario_id = user.id,
         respuestas = json.dumps(data.respuestas),
@@ -306,11 +299,18 @@ def get_mi_cuestionario(token: str, db: Session = Depends(get_db)):
     user = get_current_user(token, db)
     cuestionario = db.query(models.Cuestionario).filter(
         models.Cuestionario.usuario_id == user.id
-    ).first()
+    ).order_by(models.Cuestionario.fecha.desc()).first()
     if not cuestionario:
         raise HTTPException(status_code=404, detail="Cuestionario no completado aún.")
     return cuestionario
 
+
+@app.get("/cuestionario/historial", response_model=List[schemas.CuestionarioOut])
+def get_historial_cuestionarios(token: str, db: Session = Depends(get_db)):
+    user = get_current_user(token, db)
+    return db.query(models.Cuestionario).filter(
+        models.Cuestionario.usuario_id == user.id
+    ).order_by(models.Cuestionario.fecha.asc()).all()
 
 if __name__ == "__main__":
     import uvicorn

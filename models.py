@@ -19,8 +19,8 @@ class Usuario(Base):
     rol      = Column(Enum(RolEnum), nullable=False)
     carrera  = Column(String, nullable=True)
 
-    sesiones     = relationship("Sesion", back_populates="usuario")
-    cuestionario = relationship("Cuestionario", back_populates="usuario", uselist=False)
+    sesiones      = relationship("Sesion", back_populates="usuario")
+    cuestionarios = relationship("Cuestionario", back_populates="usuario")
 
 
 class Sesion(Base):
@@ -64,4 +64,4 @@ class Cuestionario(Base):
     resultado  = Column(String, nullable=False)
     fecha      = Column(DateTime(timezone=True), server_default=func.now())
 
-    usuario = relationship("Usuario", back_populates="cuestionario")
+    usuario = relationship("Usuario", back_populates="cuestionarios") 
