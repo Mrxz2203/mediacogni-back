@@ -312,6 +312,103 @@ def get_historial_cuestionarios(token: str, db: Session = Depends(get_db)):
         models.Cuestionario.usuario_id == user.id
     ).order_by(models.Cuestionario.fecha.asc()).all()
 
+# ── CUESTIONARIO OSIVQ ─────────────────────────────
+
+# Ítems que se invierten (carga negativa en su factor)
+ITEMS_INVERTIDOS_OBJECT = {10, 25}
+ITEMS_INVERTIDOS_VERBAL = {24, 38}
+
+# Ítems por dimensión
+ITEMS_OBJECT = {6, 11, 20, 23, 26, 29, 33, 34, 40, 43, 45, 18, 13, 10, 25}
+ITEMS_VERBAL = {2, 4, 8, 9, 16, 21, 35, 36, 37, 39, 41, 28, 19, 24, 38}
+
+def calcular_resultado_osivq(respuestas: dict) -> dict:
+    """
+    Calcula puntajes Object y Verbal del OSIVQ.
+    Escala Likert 1-5. Ítems invertidos: 6 - valor.
+    Umbral de empate: diferencia <= 5 → Balanceado.
+    """
+    puntaje_object = 0
+    puntaje_verbal = 0
+
+    for item_str, valor in respuestas.items():
+        item = int(item_str)
+        v = int(valor)
+
+        if item in ITEMS_OBJECT:
+            if item in ITEMS_INVERTIDOS_OBJECT:
+                v = 6 - v
+            puntaje_object += v
+
+        elif item in ITEMS_VERBAL:
+            if item in ITEMS_INVERTIDOS_VERBAL:
+                v = 6 - v
+            puntaje_verbal += v
+
+    diferencia = abs(puntaje_object - puntaje_verbal)
+
+    if diferencia <= 5:
+        resultado = "Balanceado"
+    elif puntaje_object > puntaje_verbal:
+        resultado = "Visual"
+    else:
+        resultado = "Verbal"
+
+    return {
+        "puntaje_object": puntaje_object,
+        "puntaje_verbal": puntaje_verbal,
+        "resultado":      resultado,
+    }
+
+
+@app.post("/cuestionario-osivq", response_model=schemas.CuestionarioOSIVQOut, status_code=201)
+def crear_cuestionario_osivq(
+    data: schemas.CuestionarioOSIVQCreate,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(token, db)
+    calc = calcular_resultado_osivq(data.respuestas)
+
+    cuestionario = models.CuestionarioOSIVQ(
+        usuario_id     = user.id,
+        respuestas     = json.dumps(data.respuestas),
+        puntaje_object = calc["puntaje_object"],
+        puntaje_verbal = calc["puntaje_verbal"],
+        resultado      = calc["resultado"],
+    )
+    db.add(cuestionario)
+    db.commit()
+    db.refresh(cuestionario)
+    return cuestionario
+
+
+@app.get("/cuestionario-osivq/me", response_model=schemas.CuestionarioOSIVQOut)
+def get_mi_cuestionario_osivq(token: str, db: Session = Depends(get_db)):
+    user = get_current_user(token, db)
+    cuestionario = db.query(models.CuestionarioOSIVQ).filter(
+        models.CuestionarioOSIVQ.usuario_id == user.id
+    ).order_by(models.CuestionarioOSIVQ.fecha.desc()).first()
+    if not cuestionario:
+        raise HTTPException(status_code=404, detail="Cuestionario OSIVQ no completado aún.")
+    return cuestionario
+
+
+@app.get("/cuestionario-osivq/historial", response_model=List[schemas.CuestionarioOSIVQOut])
+def get_historial_osivq(token: str, db: Session = Depends(get_db)):
+    user = get_current_user(token, db)
+    return db.query(models.CuestionarioOSIVQ).filter(
+        models.CuestionarioOSIVQ.usuario_id == user.id
+    ).order_by(models.CuestionarioOSIVQ.fecha.asc()).all()
+
+
+@app.get("/admin/usuarios/{user_id}/cuestionarios-osivq", response_model=List[schemas.CuestionarioOSIVQOut])
+def admin_get_cuestionarios_osivq_usuario(user_id: int, token: str, db: Session = Depends(get_db)):
+    require_admin(token, db)
+    return db.query(models.CuestionarioOSIVQ).filter(
+        models.CuestionarioOSIVQ.usuario_id == user_id
+    ).order_by(models.CuestionarioOSIVQ.fecha.desc()).all()
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

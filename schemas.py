@@ -68,3 +68,18 @@ class CuestionarioOut(BaseModel):
 
     class Config:
         from_attributes = True
+        
+
+class CuestionarioOSIVQCreate(BaseModel):
+    respuestas: dict  # {"1": 3, "2": 5, ...} valores del 1 al 5
+
+class CuestionarioOSIVQOut(BaseModel):
+    id:             int
+    puntaje_object: int
+    puntaje_verbal: int
+    resultado:      str
+    fecha:          datetime
+    respuestas:     str
+
+    class Config:
+        from_attributes = True

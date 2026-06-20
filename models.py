@@ -21,6 +21,7 @@ class Usuario(Base):
 
     sesiones      = relationship("Sesion", back_populates="usuario")
     cuestionarios = relationship("Cuestionario", back_populates="usuario")
+    cuestionarios_osivq = relationship("CuestionarioOSIVQ", back_populates="usuario")
 
 
 class Sesion(Base):
@@ -65,3 +66,17 @@ class Cuestionario(Base):
     fecha      = Column(DateTime(timezone=True), server_default=func.now())
 
     usuario = relationship("Usuario", back_populates="cuestionarios") 
+    
+
+class CuestionarioOSIVQ(Base):
+    __tablename__ = "cuestionarios_osivq"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    usuario_id     = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    respuestas     = Column(String, nullable=False)
+    puntaje_object = Column(Integer, nullable=False)
+    puntaje_verbal = Column(Integer, nullable=False)
+    resultado      = Column(String, nullable=False)
+    fecha          = Column(DateTime(timezone=True), server_default=func.now())
+
+    usuario = relationship("Usuario", back_populates="cuestionarios_osivq")
